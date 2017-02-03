@@ -3,9 +3,10 @@ function iacc_trainSVMcImgIllum()
 %illumination differences and saves the model for later use on new images.
 %
 % Usage:
-%   put low light-contrast (LLC) images and hight light-contrast (HLC)
-%   images in two individual folders and call the function to select the
-%   corresponding images for training.
+%   put some low light-contrast (LLC) images and hight light-contrast (HLC)
+%   images in two folders and call function iacc_trainSVMcImgIllumto select
+%   the corresponding images for training. Trained model will be saved to
+%   the defined folder. 
 % 
 %Training data X uses the concatenated intensity values of [R G B] channel
 %histograms as a matrix format: rows (ie. images) by cloumns of [R G B]
@@ -13,12 +14,12 @@ function iacc_trainSVMcImgIllum()
 %classes/groups of illumination.
 %
 %
-% 
 %-----------------------------
 % Kang Yu 
 % Email: kang.yu@usys.ethz.ch
 % 2017-01-24
 %
+% see also: iacc_trainSVMcImgIllum
 
 % startPath = 'P:\Evaluation\FIP\Analysis';
 startPath = pwd;
