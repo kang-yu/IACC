@@ -10,15 +10,15 @@ function iacc_uzSVMcImgIllum
 %----------------------------
 % Kang Yu
 % Email: kang.yu@usys.ethz.ch
-% 2017-01-25
+% 2017-02-08
 %
 % See also: iacc_trainSVMcImgIllum
 
 
 %% load and test model
 
-clear; clc
-% startdir = 'O:\FIP\Analysis\2015\WW009\IGB1M\';
+clc; clear
+
 startdir = pwd;
 
 % modFName = 'svmClassifyIllum';
@@ -26,7 +26,7 @@ startdir = pwd;
     '*.*', 'All files (*.*)'},...
    'select model file', startdir);
 
-% modStr = load([saveDir, modFName]);
+% load saved model
 modStr = load(fullfile(PathName, modFName));
 modIOName = char(fieldnames(modStr));
 cMod = modStr.(modIOName);
@@ -34,7 +34,7 @@ cMod = modStr.(modIOName);
 %% test folder
 
 % testDir = 'P:\Publications\Publications\in_progress\CC_IP\scripts\test_run_illum_classmodel'
-[testFN, pathname, ~] = uigetfile({'*.*', 'All files (*.*)'},...
+[testFN, tpathname, ~] = uigetfile({'*.*', 'All files (*.*)'},...
     'Select image files', 'MultiSelect', 'on', startdir);
 
 %% prepare test data
@@ -46,16 +46,16 @@ nTest = numel(testFN);
 yTest = zeros(nTest,1);
 xTest = zeros(nTest,256*3);
 for i=1:nTest
-    imT = imread(fullfile(pathname, testFN{i}));
+    imT = imread(fullfile(tpathname, testFN{i}));
     % imT = imcrop(imT, [1 1 5616 2600]);
     imThist = [imhist(imT(:,:,1)); imhist(imT(:,:,2)); imhist(imT(:,:,3))];
-    yTest(i) = 1;
+    yTest(i) = 1; % dummy label
     xTest(i,:) = imThist';
 end
 
 %% plot the first test image
 
-imT1 = imread(fullfile(pathname,testFN{1}));
+imT1 = imread(fullfile(tpathname,testFN{1}));
 % imT1 = imcrop(imT1, [1 1 5616 2600]);
 figure;
 subplot(221); 
@@ -71,17 +71,29 @@ subplot(122);
     hp(3).Color = 'b';
 
 %% predict lables of test data and plot lables
+% tLoss = loss(cMod,xTest,yTest) % yTest dummy label
+yTHat = predict(cMod, xTest);
 
-ooLoss = loss(cMod,xTest,yTest)
-yTHat = predict(cMod,xTest);
-nVec = 1:size(xTest,1);
-
-figure;
+figure
+set(gcf,'units','normalized','outerposition',[0 0 1 1]);
 for j = 1:nTest;
-    subplot(4,5,j)
-    p = plot(reshape(xTest(j,:), 256, [])); 
-    title(sprintf('Class: %d',yTHat(j)))
-    p(1).Color = 'r';
-    p(2).Color = 'g';
-    p(3).Color = 'b';
+    if j <= 16
+        subplot(4,4,j)
+        p = plot(reshape(xTest(j,:), 256, []));
+        title(sprintf('Class: %d', yTHat(j)))
+        title(sprintf('%s \nPredited Class: %d', testFN{j}, yTHat(j)),'interpreter', 'none')
+        p(1).Color = 'r';
+        p(2).Color = 'g';
+        p(3).Color = 'b';
+    else 
+        disp('Plot done')
+    end
 end
+
+%% save predictions
+
+resfp = fullfile(tpathname, [modFName(1:end-4), '_Predicted-Image-Illuminination.txt']);
+tbl = table(testFN', yTHat, 'VariableNames',{'Image' 'PredictedLabel'});
+writetable(tbl, resfp, 'Delimiter', ',')
+winopen(tpathname)
+

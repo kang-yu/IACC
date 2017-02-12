@@ -17,12 +17,37 @@ function iacc_trainSVMcImgIllum()
 %-----------------------------
 % Kang Yu 
 % Email: kang.yu@usys.ethz.ch
-% 2017-01-24
+% 2017-02-08
 %
 % see also: iacc_trainSVMcImgIllum
 
-% startPath = 'P:\Evaluation\FIP\Analysis';
+clc;clear
+
 startPath = pwd;
+saveTime = datestr(now,'yyyymmdd_HHMM');
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% define model training method
+prompt = {'Model Name prefix:',...
+    'CV-Method: [1 = holdout, 2 = kfold (default 10)]',...
+    'Holdout percent: [0~1]'};
+dlg_title = 'Model Training';
+num_lines = [1 40; 1 25; 1 20];
+defaultans = {'SVMClassifyIllum_', '1', '0.05'};
+answer = inputdlg(prompt, dlg_title, num_lines, defaultans);
+modfnPref = answer{1};
+CV_method = str2double(answer{2});
+if isempty(answer{3})
+    switch answer{2}
+        case '1'
+            CV_pn = 0.05;
+        case '2'
+            CV_pn = 10;
+    end
+else
+    CV_pn = str2double(answer{3});
+end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % LLC img dir
 
@@ -39,6 +64,9 @@ startPath = pwd;
     'Select HLC-Images', ...
     startPath,...
     'MultiSelect', 'on');
+
+% output dir
+saveDir = uigetdir(startPath,'select folder to save the model');
 
 %% label LLC images as 1
 
@@ -80,51 +108,79 @@ subplot(122), plot(reshape(xDat2(1,:), 256, [])); title(sprintf('Class %d',yLab2
 
 xDat = [xDat1; xDat2];
 yLab = [yLab1; yLab2];
+nObs = numel(yLab);
 
-%% define 25% holdout sample and specify the training and holdout samples
-% modify accordingly
+%% specify the training and holdout samples
+% define 25% for testing kfold % modify accordingly
 
-p = 0.25;
-CVP = cvpartition(yLab,'Holdout', p); 
-inIdx = training(CVP);               
+if CV_pn < 1 % holdout
+    p = CV_pn;
+elseif CV_pn > 1
+    p = 0.25;
+end
+
+if nObs*p < 1
+    p = 1/nObs; % at least allow 1 to be leaved out
+    warning('Holdout P is too small. Reset to have meaningful (>=1) number of leave-out samples!')
+end
+
+CVP = cvpartition(yLab,'Holdout', p);
+inIdx = training(CVP);
 ouIdx = test(CVP);                   % Test sample indices
-
 %% train svm model uisng training set
 
 t = templateSVM('SaveSupportVectors',true);
 
-% modSV = fitcecoc(xDat, yLab, 'Learners', t, 'KFold', 5);
-
-modSV = fitcecoc(xDat(inIdx,:), yLab(inIdx), 'Learners',t);
-
-%% compact
-
-mod = discardSupportVectors(modSV);
-cMod = compact(mod);
-
-clear mod modSV;
+switch CV_method
+    case 1
+        modSV = fitcecoc(xDat(inIdx,:), yLab(inIdx), 'Learners',t);
+        mod = discardSupportVectors(modSV);
+        cMod = compact(mod);
+        clear mod modSV;
+        oosLoss = loss(cMod,xDat(ouIdx,:),yLab(ouIdx))
+        yLabHat = predict(cMod,xDat(ouIdx,:));
+    case 2
+        % NEED TO BE FURTHER DEVELOPED
+        
+        cvlossthreshold = 0.05; % might be too small when only small number of images used
+        if nObs*cvlossthreshold < 1
+            cvlossthreshold = 1/nObs; % at least allow 1 to be leaved out
+            warning('CVLoss threshold is too small. Reset to have at least 1 wrong classification!')
+        end
+        
+        cvloss = 1;
+        while ~(cvloss <= cvlossthreshold)
+            cMod = fitcsvm(xDat, yLab, 'KernelFunction','rbf','Standardize',true,'KernelScale','auto');
+            cvMod = crossval(cMod);
+            cvloss = kfoldLoss(cvMod)
+        end
+        yLabHat = predict(cMod,xDat(ouIdx,:));
+end
 
 %% Assess Holdout Sample Performance
 
-oosLoss = loss(cMod,xDat(ouIdx,:),yLab(ouIdx))
-yLabHat = predict(cMod,xDat(ouIdx,:));
 nVec = 1:size(xDat,1);
 ouIdx = nVec(ouIdx);
+allImNames = [imfn1, imfn2];
+ouImNames = allImNames(ouIdx);
 
-figure;
+figure
+set(gcf,'units','normalized','outerposition',[0 0 1 1]);
 for j = 1:numel(ouIdx);
-    subplot(3,3,j)
-    plot(reshape(xDat(ouIdx(j),:), 256, []));
-    text(0.8, 0.9, sprintf('Label: %d', yLab(ouIdx(j))),'unit','normalized')
-    h = gca;
-    title(sprintf('Predited Class: %d', yLabHat(j)))
+    if j <= 16
+        subplot(4,4,j)
+        plot(reshape(xDat(ouIdx(j),:), 256, []));
+        text(0.8, 0.9, sprintf('Label: %d', yLab(ouIdx(j))),'unit','normalized')
+        % h = gca;
+        title(sprintf('%s \nPredited Class: %d', ouImNames{j}, yLabHat(j)),'interpreter', 'none')
+    else
+        disp('Plot done')
+    end
 end
 
 %% save model
 
-saveTime = datestr(now,'yyyymmdd_HHMM');
-
-saveDir = uigetdir(startPath,'select folder to save the model');
-modFName = ['SVMClassifyIllum_', saveTime];
+modFName = [modfnPref, saveTime];
 save([saveDir,'/', modFName,'.mat'], 'cMod');
+winopen(saveDir)
 
